@@ -24,22 +24,12 @@ class FirebaseMessagingHelper {
   static bool _isDebug = false;
 
   static Future<void> initial({
-    BuildContext? context,
     bool isDebug = false,
   }) async {
     _isDebug = isDebug;
 
     await _hive.initFlutter('FirebaseMessagingHelper');
     _box = await _hive.openBox('config');
-
-    if (context != null) {
-      // ignore: use_build_context_synchronously
-      await requestPermisstion(context);
-    } else {
-      final result = await FirebaseMessaging.instance.requestPermission();
-      _box!.put('isAllowNotification',
-          result.authorizationStatus == AuthorizationStatus.authorized);
-    }
 
     _fcmToken = await FirebaseMessaging.instance.getToken();
     instance.onTokenRefresh.listen((token) {
@@ -76,10 +66,27 @@ class FirebaseMessagingHelper {
     FirebaseMessaging.onMessage
         .listen((message) => _firebaseMessagingHandler(message));
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingHandler);
+    FirebaseMessaging.onMessageOpenedApp
+        .listen((message) => _firebaseMessagingHandler(message));
   }
 
-  static initialBackground() {
-    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingHandler);
+  static Future<void> requestPermission({BuildContext? context}) async {
+    AwesomeNotifications().isNotificationAllowed().then((isAllowed) async {
+      if (!isAllowed) {
+        final isLocalAllowed = _box!.get('isAllowNotification') as bool?;
+
+        if (isLocalAllowed != null) return;
+
+        if (context != null) {
+          // ignore: use_build_context_synchronously
+          await _requestPermisstion(context);
+        } else {
+          final result = await FirebaseMessaging.instance.requestPermission();
+          _box!.put('isAllowNotification',
+              result.authorizationStatus == AuthorizationStatus.authorized);
+        }
+      }
+    });
   }
 
   // It is assumed that all messages contain a data field with the key 'type'
@@ -157,12 +164,11 @@ class FirebaseMessagingHelper {
     }
   }
 
-  static Future<bool> requestPermisstion(BuildContext context) async {
-    final isLocalAllowed = _box!.get('isAllowNotification') as bool?;
+  static Future<bool> _requestPermisstion(BuildContext context) async {
     final isPermissionAllowed =
         await AwesomeNotifications().isNotificationAllowed();
 
-    if (isLocalAllowed != null || isPermissionAllowed) {
+    if (isPermissionAllowed) {
       return false;
     }
 
