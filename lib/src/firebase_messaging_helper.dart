@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:awesome_notifications/awesome_notifications.dart';
@@ -7,10 +8,14 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 
 // ignore: depend_on_referenced_packages, implementation_imports
-import 'package:hive/src/hive_impl.dart';
+import 'package:hive/src/hive_impl.dart' show HiveImpl;
 import 'package:hive_flutter/hive_flutter.dart';
 
+import 'package:http/http.dart' as http;
+
 class FirebaseMessagingHelper {
+  FirebaseMessagingHelper._();
+
   static String? _fcmToken;
   static final instance = FirebaseMessaging.instance;
   static String? get fcmToken => _fcmToken;
@@ -31,7 +36,9 @@ class FirebaseMessagingHelper {
       // ignore: use_build_context_synchronously
       await requestPermisstion(context);
     } else {
-      await FirebaseMessaging.instance.requestPermission();
+      final result = await FirebaseMessaging.instance.requestPermission();
+      _box!.put('isAllowNotification',
+          result.authorizationStatus == AuthorizationStatus.authorized);
     }
 
     _fcmToken = await FirebaseMessaging.instance.getToken();
@@ -53,7 +60,7 @@ class FirebaseMessagingHelper {
           channelDescription: 'Normal Notification',
           defaultColor: const Color(0xFF9D50DD),
           ledColor: Colors.white,
-          importance: NotificationImportance.High,
+          importance: NotificationImportance.Max,
           vibrationPattern: highVibrationPattern,
         )
       ],
@@ -66,9 +73,9 @@ class FirebaseMessagingHelper {
       debug: true,
     );
 
-    // print('User granted permission: ${settings.authorizationStatus}');
     FirebaseMessaging.onMessage
         .listen((message) => _firebaseMessagingHandler(message));
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingHandler);
   }
 
   static initialBackground() {
@@ -203,6 +210,64 @@ class FirebaseMessagingHelper {
     );
 
     return result ?? false;
+  }
+
+  /// Source: https://github.com/rithik-dev/firebase_notifications_handler
+  ///
+  /// Trigger FCM notification.
+  ///
+  /// [cloudMessagingServerKey] : The server key from the cloud messaging console.
+  /// This key is required to trigger the notification.
+  ///
+  /// [title] : The notification's title.
+  ///
+  /// [body] : The notification's body.
+  ///
+  /// [imageUrl] : The notification's image URL.
+  ///
+  /// [fcmTokens] : List of the registered devices' tokens.
+  ///
+  /// [payload] : Notification payload, is provided in the [onTap] callback.
+  ///
+  /// [additionalHeaders] : Additional headers,
+  /// other than 'Content-Type' and 'Authorization'.
+  ///
+  /// [notificationMeta] : Additional content that you might want to pass
+  /// in the "notification" attribute, apart from title, body, image.
+  static Future<http.Response> sendNotification({
+    required String cloudMessagingServerKey,
+    required String title,
+    required List<String> fcmTokens,
+    String? body,
+    String? imageUrl,
+    Map? payload,
+    Map? additionalHeaders,
+    Map? notificationMeta,
+  }) async {
+    return await http.post(
+      Uri.parse('https://fcm.googleapis.com/fcm/send'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'key=$cloudMessagingServerKey',
+        ...?additionalHeaders,
+      },
+      body: jsonEncode({
+        if (fcmTokens.length == 1)
+          "to": fcmTokens.first
+        else
+          "registration_ids": fcmTokens,
+        "notification": {
+          "title": title,
+          "body": body,
+          "image": imageUrl,
+          ...?notificationMeta,
+        },
+        "data": {
+          "click_action": "FLUTTER_NOTIFICATION_CLICK",
+          ...?payload,
+        },
+      }),
+    );
   }
 
   static void _printDebug(Object? object) =>

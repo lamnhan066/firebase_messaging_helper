@@ -1,18 +1,37 @@
-# firebase_messaging_helper
+# Firebase Messaging Helper
 
-A new Flutter plugin project.
+This plugin combine firebase_messaging with awesome_notification to help you esier to implement firebase notification.
 
-## Getting Started
+## Setup
 
-This project is a starting point for a Flutter
-[plug-in package](https://flutter.dev/developing-packages/),
-a specialized package that includes platform-specific implementation code for
-Android and/or iOS.
+### [Apple integration](https://firebase.flutter.dev/docs/messaging/apple-integration)
 
-For help getting started with Flutter development, view the
-[online documentation](https://flutter.dev/docs), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+### Android integration (Optional)
 
-The plugin project was generated without specifying the `--platforms` flag, no platforms are currently supported.
-To add platforms, run `flutter create -t plugin --platforms <platforms> .` in this directory.
-You can also find a detailed instruction on how to add platforms in the `pubspec.yaml` at https://flutter.dev/docs/development/packages-and-plugins/developing-packages#plugin-platforms.
+    Add the following `meta-data` schema within the `application` component:
+
+    ``` xml
+    <meta-data
+    android:name="com.google.firebase.messaging.default_notification_channel_id"
+    android:value="normal_channel" />
+    ```
+
+    Add this intent-filter in AndroidManifest in the `<activity>` tag with `android:name=".MainActivity"`:
+
+    ``` xml
+    <intent-filter>
+        <action android:name="FLUTTER_NOTIFICATION_CLICK" />
+        <category android:name="android.intent.category.DEFAULT" />
+    </intent-filter>
+    ```
+
+## Usage
+
+Initialize plugin:
+
+    ``` dart
+    FirebaseMessagingHelper.initial(
+        context: context, // To show dialog before showing permission requested
+        isDebug: true, // To show debug log
+    );
+    ```
