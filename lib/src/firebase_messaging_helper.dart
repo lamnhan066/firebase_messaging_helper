@@ -133,9 +133,6 @@ class FirebaseMessagingHelper {
           message.notification?.body,
           considerWhiteSpaceAsEmpty: true,
         )) {
-      _printDebug(
-          'message also contained a notification: ${message.notification}');
-
       String? imageUrl;
       imageUrl ??= message.notification!.android?.imageUrl;
       imageUrl ??= message.notification!.apple?.imageUrl;
@@ -156,6 +153,8 @@ class FirebaseMessagingHelper {
             : 'BigPicture',
         NOTIFICATION_BIG_PICTURE: imageUrl
       };
+
+      _printDebug('Notification: $notificationAdapter');
 
       AwesomeNotifications()
           .createNotificationFromJsonData(notificationAdapter);
