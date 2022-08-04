@@ -22,6 +22,8 @@ class FirebaseMessagingHelper {
   static String? _fcmToken;
   static bool _isDebug = false;
 
+  static RemoteMessage? _payload;
+
   /// Initialize the plugin
   ///
   /// [preDialogConfig] config for the dialog showing before asking permission
@@ -88,7 +90,7 @@ class FirebaseMessagingHelper {
     }
 
     FirebaseMessaging.onMessage.listen((message) {
-      _firebaseForegroundMessagingHandler(message, null);
+      _firebaseForegroundMessagingHandler(message);
       if (onForegroundMessage != null) {
         onForegroundMessage(message);
       }
@@ -122,7 +124,12 @@ class FirebaseMessagingHelper {
       handler(initialMessage);
     }
 
-    _awesomeNotifications.actionStream.listen((event) {});
+    _awesomeNotifications.actionStream.listen((event) {
+      if (event.channelKey == 'normal_channel' && _payload != null) {
+        handler(_payload!);
+        _payload = null;
+      }
+    });
 
     // Also handle any interaction when the app is in the background via a
     // Stream listener
@@ -135,7 +142,6 @@ class FirebaseMessagingHelper {
   /// Push notification for Android on foreground mode
   static Future<void> _firebaseForegroundMessagingHandler(
     RemoteMessage message,
-    void Function(RemoteMessage message)? onTapped,
   ) async {
     _printDebug('Handling a foreground message: ${message.messageId}');
 
@@ -160,7 +166,7 @@ class FirebaseMessagingHelper {
         ),
       );
 
-      if (onTapped != null) onTapped(message);
+      _payload = message;
     }
   }
 
