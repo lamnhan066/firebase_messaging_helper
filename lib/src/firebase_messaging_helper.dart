@@ -11,7 +11,7 @@ import 'package:flutter/material.dart';
 
 import 'package:http/http.dart' as http;
 
-part 'dialog.dart';
+part 'predialog_config.dart';
 
 class FirebaseMessagingHelper {
   FirebaseMessagingHelper._();
@@ -28,7 +28,7 @@ class FirebaseMessagingHelper {
   ///
   /// [preDialogConfig] config for the dialog showing before asking permission
   ///
-  /// [onBackgroundTapped] called when user tapping notification on background mode
+  /// [onTapped] called when user tapping notification on background mode
   ///
   /// [onForegroundMessage] called when there is a notification on foreground
   ///
@@ -124,12 +124,14 @@ class FirebaseMessagingHelper {
       handler(initialMessage);
     }
 
-    _awesomeNotifications.actionStream.listen((event) {
-      if (event.channelKey == 'normal_channel' && _payload != null) {
-        handler(_payload!);
-        _payload = null;
-      }
-    });
+    if (Platform.isAndroid) {
+      _awesomeNotifications.actionStream.listen((event) {
+        if (event.channelKey == 'normal_channel' && _payload != null) {
+          handler(_payload!);
+          _payload = null;
+        }
+      });
+    }
 
     // Also handle any interaction when the app is in the background via a
     // Stream listener
