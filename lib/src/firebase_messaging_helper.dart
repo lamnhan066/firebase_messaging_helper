@@ -99,8 +99,6 @@ class FirebaseMessagingHelper {
   }
 
   static Future<void> _requestPermission({PreDialogData? preDialogData}) async {
-    // await FirebaseMessaging.instance
-    //     .setForegroundNotificationPresentationOptions();
     _awesomeNotifications.isNotificationAllowed().then((isAllowed) async {
       if (!isAllowed) {
         final isLocalAllowed = _box!.get('isAllowNotification') as bool?;
@@ -117,6 +115,8 @@ class FirebaseMessagingHelper {
               result.authorizationStatus == AuthorizationStatus.authorized);
         }
       }
+      await FirebaseMessaging.instance
+          .setForegroundNotificationPresentationOptions();
     });
   }
 
