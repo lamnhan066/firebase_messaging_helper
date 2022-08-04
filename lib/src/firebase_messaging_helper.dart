@@ -4,7 +4,6 @@ import 'dart:convert';
 import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:box_widgets/box_widgets.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:firebase_messaging_helper/src/widgets/dialog.dart';
 import 'package:flutter/material.dart';
 
 // ignore: depend_on_referenced_packages, implementation_imports
@@ -12,6 +11,8 @@ import 'package:hive/src/hive_impl.dart' show HiveImpl;
 import 'package:hive_flutter/hive_flutter.dart';
 
 import 'package:http/http.dart' as http;
+
+part 'dialog.dart';
 
 class FirebaseMessagingHelper {
   FirebaseMessagingHelper._();
@@ -98,8 +99,8 @@ class FirebaseMessagingHelper {
   }
 
   static Future<void> _requestPermission({PreDialogData? preDialogData}) async {
-    await FirebaseMessaging.instance
-        .setForegroundNotificationPresentationOptions();
+    // await FirebaseMessaging.instance
+    //     .setForegroundNotificationPresentationOptions();
     _awesomeNotifications.isNotificationAllowed().then((isAllowed) async {
       if (!isAllowed) {
         final isLocalAllowed = _box!.get('isAllowNotification') as bool?;
@@ -140,7 +141,7 @@ class FirebaseMessagingHelper {
   static int _notificationId = 0;
   static Future<void> _firebaseForegroundMessagingHandler(
       RemoteMessage message) async {
-    _printDebug('Handling a background message: ${message.messageId}');
+    _printDebug('Handling a foreground message: ${message.messageId}');
 
     if (message.notification != null) {
       String? imageUrl;

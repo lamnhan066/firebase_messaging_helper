@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+part of 'firebase_messaging_helper.dart';
 
 class PreDialogData {
   final BuildContext context;
