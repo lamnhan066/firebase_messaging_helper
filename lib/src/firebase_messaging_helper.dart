@@ -37,7 +37,7 @@ class FirebaseMessagingHelper {
   static Future<void> initial({
     PreDialogConfig? preDialogConfig,
     void Function(RemoteMessage message)? onForegroundMessage,
-    void Function(RemoteMessage message)? onBackgroundTapped,
+    void Function(RemoteMessage message)? onTapped,
     Future<void> Function(RemoteMessage message)? onBackgroundMessage,
     bool isDebug = false,
   }) async {
@@ -83,12 +83,12 @@ class FirebaseMessagingHelper {
       );
     }
 
-    if (onBackgroundTapped != null) {
-      _setupInteractedMessage(onBackgroundTapped);
+    if (onTapped != null) {
+      _setupInteractedMessage(onTapped);
     }
 
     FirebaseMessaging.onMessage.listen((message) {
-      _firebaseForegroundMessagingHandler(message);
+      _firebaseForegroundMessagingHandler(message, null);
       if (onForegroundMessage != null) {
         onForegroundMessage(message);
       }
@@ -122,6 +122,8 @@ class FirebaseMessagingHelper {
       handler(initialMessage);
     }
 
+    _awesomeNotifications.actionStream.listen((event) {});
+
     // Also handle any interaction when the app is in the background via a
     // Stream listener
     FirebaseMessaging.onMessageOpenedApp.listen(handler);
@@ -133,6 +135,7 @@ class FirebaseMessagingHelper {
   /// Push notification for Android on foreground mode
   static Future<void> _firebaseForegroundMessagingHandler(
     RemoteMessage message,
+    void Function(RemoteMessage message)? onTapped,
   ) async {
     _printDebug('Handling a foreground message: ${message.messageId}');
 
@@ -156,6 +159,8 @@ class FirebaseMessagingHelper {
           icon: message.notification?.android?.smallIcon,
         ),
       );
+
+      if (onTapped != null) onTapped(message);
     }
   }
 
