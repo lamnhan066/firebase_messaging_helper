@@ -16,6 +16,8 @@ import 'package:http/http.dart' as http;
 class FirebaseMessagingHelper {
   FirebaseMessagingHelper._();
 
+  static final _awesomeNotifications = AwesomeNotifications();
+
   static String? _fcmToken;
   static final instance = FirebaseMessaging.instance;
   static String? get fcmToken => _fcmToken;
@@ -40,7 +42,7 @@ class FirebaseMessagingHelper {
 
     _printDebug('Fcm Token: $_fcmToken');
 
-    await AwesomeNotifications().initialize(
+    await _awesomeNotifications.initialize(
       null, // default app icon
       [
         NotificationChannel(
@@ -71,7 +73,7 @@ class FirebaseMessagingHelper {
   }
 
   static Future<void> requestPermission({BuildContext? context}) async {
-    AwesomeNotifications().isNotificationAllowed().then((isAllowed) async {
+    _awesomeNotifications.isNotificationAllowed().then((isAllowed) async {
       if (!isAllowed) {
         final isLocalAllowed = _box!.get('isAllowNotification') as bool?;
 
@@ -156,16 +158,15 @@ class FirebaseMessagingHelper {
 
       _printDebug('Notification: $notificationAdapter');
 
-      AwesomeNotifications()
-          .createNotificationFromJsonData(notificationAdapter);
+      _awesomeNotifications.createNotificationFromJsonData(notificationAdapter);
     } else {
-      AwesomeNotifications().createNotificationFromJsonData(message.data);
+      _awesomeNotifications.createNotificationFromJsonData(message.data);
     }
   }
 
   static Future<bool> _requestPermisstion(BuildContext context) async {
     final isPermissionAllowed =
-        await AwesomeNotifications().isNotificationAllowed();
+        await _awesomeNotifications.isNotificationAllowed();
 
     if (isPermissionAllowed) {
       return false;
@@ -201,7 +202,7 @@ class FirebaseMessagingHelper {
             BoxButton(
               title: const Text('Đồng ý'),
               onPressed: () {
-                AwesomeNotifications()
+                _awesomeNotifications
                     .requestPermissionToSendNotifications()
                     .then((value) {
                   _box!.put('isAllowNotification', value);
