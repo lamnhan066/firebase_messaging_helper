@@ -5,6 +5,7 @@ import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:box_widgets/box_widgets.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:firebase_messaging_helper/src/widgets/dialog.dart';
 import 'package:flutter/material.dart';
 
 // ignore: depend_on_referenced_packages, implementation_imports
@@ -26,12 +27,19 @@ class FirebaseMessagingHelper {
   static bool _isDebug = false;
 
   static Future<void> initial({
+    /// To show dialog before showing requesting permission
+    DialogFormat? dialogFormat,
+
+    ///
+    void Function(RemoteMessage message)? interactHandler,
     bool isDebug = false,
   }) async {
     _isDebug = isDebug;
 
     await _hive.initFlutter('FirebaseMessagingHelper');
     _box = await _hive.openBox('config');
+
+    await _requestPermission(dialogFormat: dialogFormat);
 
     _fcmToken = await FirebaseMessaging.instance.getToken();
     instance.onTokenRefresh.listen((token) {
@@ -65,6 +73,10 @@ class FirebaseMessagingHelper {
       debug: true,
     );
 
+    if (interactHandler != null) {
+      _setupInteractedMessage(interactHandler);
+    }
+
     FirebaseMessaging.onMessage
         .listen((message) => _firebaseMessagingHandler(message));
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingHandler);
@@ -72,16 +84,16 @@ class FirebaseMessagingHelper {
         .listen((message) => _firebaseMessagingHandler(message));
   }
 
-  static Future<void> requestPermission({BuildContext? context}) async {
+  static Future<void> _requestPermission({DialogFormat? dialogFormat}) async {
     _awesomeNotifications.isNotificationAllowed().then((isAllowed) async {
       if (!isAllowed) {
         final isLocalAllowed = _box!.get('isAllowNotification') as bool?;
 
         if (isLocalAllowed != null) return;
 
-        if (context != null) {
+        if (dialogFormat != null) {
           // ignore: use_build_context_synchronously
-          await _requestPermisstion(context);
+          await _requestPermisstion(dialogFormat);
         } else {
           final result = await FirebaseMessaging.instance.requestPermission();
           _box!.put('isAllowNotification',
@@ -92,7 +104,7 @@ class FirebaseMessagingHelper {
   }
 
   // It is assumed that all messages contain a data field with the key 'type'
-  static Future<void> setupInteractedMessage(
+  static Future<void> _setupInteractedMessage(
     void Function(RemoteMessage message) handler,
   ) async {
     RemoteMessage? initialMessage =
@@ -164,7 +176,7 @@ class FirebaseMessagingHelper {
     }
   }
 
-  static Future<bool> _requestPermisstion(BuildContext context) async {
+  static Future<bool> _requestPermisstion(DialogFormat dialogFormat) async {
     final isPermissionAllowed =
         await _awesomeNotifications.isNotificationAllowed();
 
@@ -173,11 +185,12 @@ class FirebaseMessagingHelper {
     }
 
     final result = await boxDialog<bool>(
-      context: context,
-      title: 'Quyền Thông Báo',
-      content: const Text(
-        'Ứng dụng cần bạn cấp quyền để gửi được những thông báo mới nhất và cần thiết nhất.'
-        '\n\nBạn có muốn cấp quyền không?',
+      context: dialogFormat.context,
+      title: dialogFormat.title, //'Quyền Thông Báo',
+      content: Text(
+        dialogFormat.content,
+        // 'Ứng dụng cần bạn cấp quyền để gửi được những thông báo mới nhất và cần thiết nhất.'
+        // '\n\nBạn có muốn cấp quyền không?',
         textAlign: TextAlign.center,
       ),
       buttons: [
@@ -186,27 +199,20 @@ class FirebaseMessagingHelper {
           align: MainAxisAlignment.end,
           buttons: [
             BoxButton(
-              title: const Text('Không'),
+              title: Text(dialogFormat.maybeLaterButtonText), //'Hỏi lại sau'),
+              backgroundColor: Colors.grey,
               onPressed: () {
-                _box!.put('isAllowNotification', false);
-
-                Navigator.pop(context, false);
+                Navigator.pop(dialogFormat.context, false);
               },
             ),
             BoxButton(
-              title: const Text('Hỏi lại sau'),
-              onPressed: () {
-                Navigator.pop(context, false);
-              },
-            ),
-            BoxButton(
-              title: const Text('Đồng ý'),
+              title: Text(dialogFormat.allowButtonText), //'Đồng ý'),
               onPressed: () {
                 _awesomeNotifications
                     .requestPermissionToSendNotifications()
                     .then((value) {
                   _box!.put('isAllowNotification', value);
-                  Navigator.pop(context, value);
+                  Navigator.pop(dialogFormat.context, value);
                 });
               },
             ),
