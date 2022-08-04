@@ -1,13 +1,13 @@
 part of 'firebase_messaging_helper.dart';
 
-class PreDialogData {
+class PreDialogConfig {
   final BuildContext context;
   final String title;
   final String content;
   final String allowButtonText;
   final String maybeLaterButtonText;
 
-  PreDialogData({
+  PreDialogConfig({
     required this.context,
     this.title = 'Notification',
     this.content =

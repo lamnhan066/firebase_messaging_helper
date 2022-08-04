@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:box_widgets/box_widgets.dart';
@@ -7,8 +8,6 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 
 // ignore: depend_on_referenced_packages, implementation_imports
-import 'package:hive/src/hive_impl.dart' show HiveImpl;
-import 'package:hive_flutter/hive_flutter.dart';
 
 import 'package:http/http.dart' as http;
 
@@ -21,35 +20,33 @@ class FirebaseMessagingHelper {
 
   static final _awesomeNotifications = AwesomeNotifications();
   static String? _fcmToken;
-  static final HiveImpl _hive = HiveImpl();
-  static Box? _box;
   static bool _isDebug = false;
 
-  static FutureOr<void> Function(RemoteMessage message)? _backgroundHandler;
-
+  /// Initialize the plugin
+  ///
+  /// [preDialogConfig] config for the dialog showing before asking permission
+  ///
+  /// [onBackgroundTapped] called when user tapping notification on background mode
+  ///
+  /// [onForegroundMessage] called when there is a notification on foreground
+  ///
+  /// [onBackgroundMessage] called when there is a notification on background
+  /// All methods here must be static or top-level, can't be anonymous
+  ///
+  /// [isDebug] show debug log
   static Future<void> initial({
-    /// To show dialog before showing requesting permission
-    PreDialogData? preDialogData,
-
-    /// Tap on notification
-    void Function(RemoteMessage message)? onNotificationTapped,
-
-    /// foreground message
+    PreDialogConfig? preDialogConfig,
     void Function(RemoteMessage message)? onForegroundMessage,
-
-    /// Background handler. All methods here must be static or top-level
-    FutureOr<void> Function(RemoteMessage message)? onBackgroundMessage,
-
-    /// Debug log
+    void Function(RemoteMessage message)? onBackgroundTapped,
+    Future<void> Function(RemoteMessage message)? onBackgroundMessage,
     bool isDebug = false,
   }) async {
     _isDebug = isDebug;
-    _backgroundHandler = onBackgroundMessage;
+    if (onBackgroundMessage != null) {
+      FirebaseMessaging.onBackgroundMessage(onBackgroundMessage);
+    }
 
-    await _hive.initFlutter('FirebaseMessagingHelper');
-    _box = await _hive.openBox('config');
-
-    await _requestPermission(preDialogData: preDialogData);
+    await _requestPermission(preDialogData: preDialogConfig);
 
     _fcmToken = await FirebaseMessaging.instance.getToken();
     FirebaseMessaging.instance.onTokenRefresh.listen((token) {
@@ -60,35 +57,35 @@ class FirebaseMessagingHelper {
 
     _printDebug('Fcm Token: $_fcmToken');
 
-    await _awesomeNotifications.initialize(
-      null, // default app icon
-      [
-        NotificationChannel(
-          channelGroupKey: 'normal_channel_group',
-          channelKey: 'normal_channel',
-          channelName: 'Normal Notification',
-          channelDescription: 'Normal Notification',
-          playSound: true,
-          enableVibration: true,
-          ledColor: Colors.white,
-          importance: NotificationImportance.Max,
-          vibrationPattern: highVibrationPattern,
-        )
-      ],
-      channelGroups: [
-        NotificationChannelGroup(
-          channelGroupkey: 'normal_channel_group',
-          channelGroupName: 'Normal channel group',
-        )
-      ],
-      debug: true,
-    );
-
-    if (onNotificationTapped != null) {
-      _setupInteractedMessage(onNotificationTapped);
+    if (Platform.isAndroid) {
+      await _awesomeNotifications.initialize(
+        null, // default app icon
+        [
+          NotificationChannel(
+            channelGroupKey: 'normal_channel_group',
+            channelKey: 'normal_channel',
+            channelName: 'Normal Notification',
+            channelDescription: 'Normal Notification',
+            playSound: true,
+            enableVibration: true,
+            ledColor: Colors.white,
+            importance: NotificationImportance.Max,
+            vibrationPattern: highVibrationPattern,
+          )
+        ],
+        channelGroups: [
+          NotificationChannelGroup(
+            channelGroupkey: 'normal_channel_group',
+            channelGroupName: 'Normal channel group',
+          )
+        ],
+        debug: isDebug,
+      );
     }
 
-    FirebaseMessaging.onBackgroundMessage(_firebaseBackgroundMessagingHandler);
+    if (onBackgroundTapped != null) {
+      _setupInteractedMessage(onBackgroundTapped);
+    }
 
     FirebaseMessaging.onMessage.listen((message) {
       _firebaseForegroundMessagingHandler(message);
@@ -98,26 +95,18 @@ class FirebaseMessagingHelper {
     });
   }
 
-  static Future<void> _requestPermission({PreDialogData? preDialogData}) async {
-    _awesomeNotifications.isNotificationAllowed().then((isAllowed) async {
-      if (!isAllowed) {
-        final isLocalAllowed = _box!.get('isAllowNotification') as bool?;
+  /// Request permission with dialog if provided
+  static Future<void> _requestPermission({
+    PreDialogConfig? preDialogData,
+  }) async {
+    final settings = await FirebaseMessaging.instance.getNotificationSettings();
 
-        if (isLocalAllowed != null) return;
-
-        if (preDialogData != null) {
-          // ignore: use_build_context_synchronously
-          await _requestPermisstion(preDialogData);
-        } else {
-          final result = await FirebaseMessaging.instance.requestPermission();
-
-          _box!.put('isAllowNotification',
-              result.authorizationStatus == AuthorizationStatus.authorized);
-        }
-      }
-      await FirebaseMessaging.instance
-          .setForegroundNotificationPresentationOptions();
-    });
+    if (settings.authorizationStatus == AuthorizationStatus.notDetermined &&
+        (preDialogData == null || await _permissionDialog(preDialogData))) {
+      await FirebaseMessaging.instance.requestPermission();
+    }
+    await FirebaseMessaging.instance
+        .setForegroundNotificationPresentationOptions(alert: true);
   }
 
   // It is assumed that all messages contain a data field with the key 'type'
@@ -138,12 +127,18 @@ class FirebaseMessagingHelper {
     FirebaseMessaging.onMessageOpenedApp.listen(handler);
   }
 
+  /// Auto increment id
   static int _notificationId = 0;
+
+  /// Push notification for Android on foreground mode
   static Future<void> _firebaseForegroundMessagingHandler(
-      RemoteMessage message) async {
+    RemoteMessage message,
+  ) async {
     _printDebug('Handling a foreground message: ${message.messageId}');
 
-    if (message.notification != null) {
+    if (message.notification != null &&
+        message.notification?.android != null &&
+        Platform.isAndroid) {
       String? imageUrl;
       imageUrl ??= message.notification!.android?.imageUrl;
       imageUrl ??= message.notification!.apple?.imageUrl;
@@ -158,61 +153,19 @@ class FirebaseMessagingHelper {
               ? NotificationLayout.Default
               : NotificationLayout.BigPicture,
           bigPicture: imageUrl,
+          icon: message.notification?.android?.smallIcon,
         ),
       );
-    } else {
-      _awesomeNotifications.createNotificationFromJsonData(message.data);
     }
   }
 
-  static Future<void> _firebaseBackgroundMessagingHandler(
-      RemoteMessage message) async {
-    _printDebug('Handling a background message: ${message.messageId}');
-
-    await _awesomeNotifications.initialize(
-      null, // default app icon
-      [
-        NotificationChannel(
-          channelGroupKey: 'normal_channel_group',
-          channelKey: 'normal_channel',
-          channelName: 'Normal Notification',
-          channelDescription: 'Normal Notification',
-          playSound: true,
-          enableVibration: true,
-          ledColor: Colors.white,
-          importance: NotificationImportance.Max,
-          vibrationPattern: highVibrationPattern,
-        )
-      ],
-      channelGroups: [
-        NotificationChannelGroup(
-          channelGroupkey: 'normal_channel_group',
-          channelGroupName: 'Normal channel group',
-        )
-      ],
-      debug: true,
-    );
-
-    Completer completer = Completer();
-    completer.complete(_backgroundHandler);
-    await completer.future;
-  }
-
-  static Future<bool> _requestPermisstion(PreDialogData dialogFormat) async {
-    final isPermissionAllowed =
-        await _awesomeNotifications.isNotificationAllowed();
-
-    if (isPermissionAllowed) {
-      return false;
-    }
-
+  /// Show permission dialog
+  static Future<bool> _permissionDialog(PreDialogConfig dialogFormat) async {
     final result = await boxDialog<bool>(
       context: dialogFormat.context,
-      title: dialogFormat.title, //'Quyền Thông Báo',
+      title: dialogFormat.title,
       content: Text(
         dialogFormat.content,
-        // 'Ứng dụng cần bạn cấp quyền để gửi được những thông báo mới nhất và cần thiết nhất.'
-        // '\n\nBạn có muốn cấp quyền không?',
         textAlign: TextAlign.center,
       ),
       buttons: [
@@ -221,21 +174,16 @@ class FirebaseMessagingHelper {
           align: MainAxisAlignment.end,
           buttons: [
             BoxButton(
-              title: Text(dialogFormat.maybeLaterButtonText), //'Hỏi lại sau'),
+              title: Text(dialogFormat.maybeLaterButtonText),
               backgroundColor: Colors.grey,
               onPressed: () {
                 Navigator.pop(dialogFormat.context, false);
               },
             ),
             BoxButton(
-              title: Text(dialogFormat.allowButtonText), //'Đồng ý'),
+              title: Text(dialogFormat.allowButtonText),
               onPressed: () {
-                _awesomeNotifications
-                    .requestPermissionToSendNotifications()
-                    .then((value) {
-                  _box!.put('isAllowNotification', value);
-                  Navigator.pop(dialogFormat.context, value);
-                });
+                Navigator.pop(dialogFormat.context, true);
               },
             ),
           ],
